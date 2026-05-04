@@ -1,0 +1,89 @@
+{
+  "name": "valuation-report",
+  "version": "1.0.0",
+  "description": "估价报告生成器 - 桌面端应用",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "vite --port 5000",
+    "start": "bash ./scripts/start.sh",
+    "build": "bash ./scripts/build.sh",
+    "lint": "eslint",
+    "lint:build": "eslint . --quiet",
+    "ts-check": "tsc -p tsconfig.json",
+    "validate": "pnpm run --parallel '/^(ts-check|lint:build)$/'",
+    "build:win": "electron-builder --win --dir",
+    "build:win:exe": "electron-builder --win"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.95.3",
+    "docx": "^9.6.1",
+    "dotenv": "^17.2.3",
+    "express": "^4.21.2",
+    "jszip": "^3.10.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.5",
+    "autoprefixer": "^10.4.20",
+    "coze-coding-dev-sdk": "^0.7.21",
+    "electron": "33.0.0",
+    "electron-builder": "25.1.8",
+    "esbuild": "^0.24.2",
+    "eslint": "^9",
+    "only-allow": "^1.2.2",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8",
+    "vite": "^7.3.1"
+  },
+  "build": {
+    "appId": "com.valuation.report",
+    "productName": "估价报告生成器",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "asar": false,
+    "extraMetadata": {
+      "main": "electron/main.js"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}.${ext}",
+      "signAndEditExecutable": false,
+      "signDlls": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "pnpm": ">=9.0.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "esbuild": "^0.27.2",
+      "is-generator-function": "1.0.10"
+    }
+  }
+}

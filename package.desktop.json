@@ -1,0 +1,51 @@
+{
+  "name": "valuation-report-desktop",
+  "version": "1.0.0",
+  "description": "估价报告生成器 - 桌面端",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
+  },
+  "build": {
+    "appId": "com.valuation.report",
+    "productName": "估价报告生成器",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "electron/icon.ico"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "icon": "electron/icon.icns"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "icon": "electron/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}

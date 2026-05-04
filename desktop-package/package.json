@@ -1,0 +1,45 @@
+{
+  "name": "valuation-report",
+  "version": "1.0.0",
+  "description": "估价报告生成器",
+  "author": "",
+  "license": "MIT",
+  "main": "main.cjs",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:win": "electron-builder --win --dir"
+  },
+  "dependencies": {
+    "docx": "^9.6.1",
+    "jszip": "^3.10.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.20",
+    "electron": "33.0.0",
+    "electron-builder": "25.1.8",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.8.2",
+    "vite": "^7.0.0"
+  },
+  "build": {
+    "appId": "com.valuation.report",
+    "productName": "估价报告生成器",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "main.cjs",
+      "package.json"
+    ],
+    "asar": false,
+    "win": {
+      "target": "dir",
+      "icon": null
+    }
+  }
+}
