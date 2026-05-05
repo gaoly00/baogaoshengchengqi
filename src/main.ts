@@ -11,7 +11,8 @@ import {
   getCellValue,
   FieldMapping,
   ExtractedData,
-  TableData
+  TableData,
+  FieldPosition
 } from './services/excelParser';
 import {
   replacePlaceholders,
@@ -19,10 +20,46 @@ import {
   validatePlaceholders,
   createSampleTemplate,
   downloadDocx,
+  saveAsDocx,
   downloadBlob,
   TableOptions
 } from './services/wordProcessor';
 import { Packer } from 'docx';
+
+// 应用版本号（每次发布新版本时手动修改这里）
+const APP_VERSION = "1.0.0";
+
+// 版本检测地址（GitHub Gist 的 raw 文件链接）
+const VERSION_URL = "https://gist.githubusercontent.com/gaoly00/79066c73f63d9c94d91338cf623dc353/raw/version.json";
+
+// 版本检测函数
+async function checkForUpdates(): Promise<void> {
+  try {
+    const response = await fetch(VERSION_URL);
+    const data = await response.json();
+    const latestVersion = data.version;
+    const updateUrl = data.url;
+    const updateNotes = data.notes || "";
+
+    if (latestVersion > APP_VERSION) {
+      const updateDiv = document.getElementById("update-notice");
+      if (updateDiv) {
+        updateDiv.innerHTML = `
+          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 16px 24px; border-radius: 12px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 18px; font-weight: bold; margin-bottom: 4px;">发现新版本 v${latestVersion}</div>
+              <div style="font-size: 13px; opacity: 0.85;">当前版本：v${APP_VERSION}</div>
+            </div>
+            <a href="${updateUrl}" target="_blank" style="background: white; color: #667eea; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">查看更新</a>
+          </div>
+        `;
+      }
+    }
+  } catch (error) {
+    // 检测失败，静默处理
+    console.log("版本检测失败", error);
+  }
+}
 
 // 应用状态
 interface AppState {
@@ -31,6 +68,7 @@ interface AppState {
   wordBuffer: ArrayBuffer | null;
   excelData: ExtractedData;
   tableData: TableData[];
+  fieldPositions: FieldPosition[];
   placeholders: string[];
   mappings: FieldMapping[];
   sheetNames: string[];
@@ -48,6 +86,7 @@ const state: AppState = {
   wordBuffer: null,
   excelData: {},
   tableData: [],
+  fieldPositions: [],
   placeholders: [],
   mappings: [],
   sheetNames: [],
@@ -78,6 +117,7 @@ function handleExcelUpload(event: Event): void {
       const result = extractAllFromExcel(buffer);
       state.excelData = result.fields;
       state.tableData = result.tables;
+      state.fieldPositions = result.fieldPositions || [];
       state.mappings = Object.keys(state.excelData).map((field, i) => ({
         fieldName: field,
         sheetName: state.selectedSheet,
@@ -151,37 +191,58 @@ async function generateReport(): Promise<void> {
     return;
   }
 
+  const validation = validatePlaceholders(state.placeholders, state.excelData);
+  const hasIssues = validation.extra.length > 0 || validation.missing.length > 0;
+
+  if (hasIssues) {
+    showPreviewDialog(validation, state.excelData, state.fieldPositions);
+    return;
+  }
+
+  await doGenerate();
+}
+
+/** 实际执行生成 */
+async function doGenerate(): Promise<void> {
   state.status = 'loading';
   state.message = '正在生成报告...';
   render();
 
   try {
-    // 优先用缓存的 buffer，否则从 File 对象读取
     const wordBuffer = state.wordBuffer || await state.wordFile!.arrayBuffer();
 
-    // 替换占位符
     const tableOpts: TableOptions = {
       fontFamily: state.tableFontFamily,
       fontSize: state.tableFontSize,
     };
     const resultBuffer = await replacePlaceholders(wordBuffer, state.excelData, state.tableData, tableOpts);
 
-    // 生成文件名
     const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const originalName = state.wordFile!.name.replace('.docx', '');
     const outputName = `${originalName}_${timestamp}.docx`;
 
-    // 下载文件
-    downloadDocx(resultBuffer, outputName);
+    // 尝试弹出 "另存为" 对话框
+    let savedName: string | null = null;
+    try {
+      savedName = await saveAsDocx(resultBuffer, outputName);
+    } catch {
+      // showSaveFilePicker 不支持时回退到直接下载
+      downloadDocx(resultBuffer, outputName);
+      savedName = outputName;
+    }
 
-    // 获取差异信息用于提示
+    if (savedName === null) {
+      // 用户取消了保存对话框
+      render();
+      return;
+    }
+
     const validation = validatePlaceholders(state.placeholders, state.excelData);
 
     state.status = 'success';
-    state.message = `报告生成成功：${outputName}`;
+    state.message = `报告生成成功：${savedName}`;
 
-    // 显示结果对话框
-    showResultDialog(outputName, validation, state.excelData, state.placeholders, state.tableData);
+    showResultDialog(savedName, validation, state.excelData, state.placeholders, state.tableData);
 
   } catch (err) {
     state.status = 'error';
@@ -189,6 +250,108 @@ async function generateReport(): Promise<void> {
   }
 
   render();
+}
+
+// 显示生成前问题预览对话框
+function showPreviewDialog(
+  validation: { missing: string[]; extra: string[] },
+  excelData: ExtractedData,
+  fieldPositions: FieldPosition[]
+): void {
+  const posMap = new Map(fieldPositions.map(p => [p.fieldName, p]));
+
+  const extraHtml = validation.extra.length > 0 ? `
+    <div class="mb-4">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="text-lg">📋</span>
+        <span class="text-sm font-medium text-amber-800">Excel 中有，但 Word 中未使用（${validation.extra.length}个）</span>
+      </div>
+      <div class="bg-amber-50 rounded-lg p-3">
+        ${validation.extra.map(field => {
+          const pos = posMap.get(field);
+          const row = pos ? `第${pos.row}行` : '';
+          const emptyHint = pos && !pos.hasValue ? `<span class="text-red-500 ml-2">（B${pos.row}为空）</span>` : '';
+          return `<div class="text-sm text-amber-700 py-0.5 font-mono">{{${field}}}${row ? `<span class="text-xs text-gray-500 ml-2">→ ${row}${emptyHint}</span>` : ''}</div>`;
+        }).join('')}
+      </div>
+    </div>
+  ` : '';
+
+  const missingHtml = validation.missing.length > 0 ? `
+    <div class="mb-4">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="text-lg">📋</span>
+        <span class="text-sm font-medium text-blue-800">Word 中有，但 Excel 中未提供（${validation.missing.length}个）</span>
+      </div>
+      <div class="bg-blue-50 rounded-lg p-3">
+        ${validation.missing.map(field => `
+          <div class="text-sm text-blue-700 py-0.5 font-mono">{{${field}}}</div>
+        `).join('')}
+      </div>
+    </div>
+  ` : '';
+
+  const dialogHtml = `
+    <div id="preview-dialog" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onclick="closePreviewDialog(event)">
+      <div class="bg-white rounded-2xl shadow-2xl max-w-xl w-full mx-4 max-h-[80vh] overflow-hidden" onclick="event.stopPropagation()">
+        <!-- Header -->
+        <div class="bg-amber-500 text-white px-6 py-4 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+            </svg>
+            <span class="font-semibold text-lg">生成前检查发现问题</span>
+          </div>
+          <button onclick="closePreviewDialog()" class="hover:bg-amber-600 rounded-lg p-1 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Content -->
+        <div class="p-6 overflow-y-auto max-h-[55vh]">
+          ${extraHtml}
+          ${missingHtml}
+
+          <div class="bg-gray-50 rounded-lg p-3 border border-gray-200">
+            <div class="flex items-start gap-2">
+              <span class="text-base shrink-0">💡</span>
+              <p class="text-xs text-gray-600">
+                Word 中缺失的字段会保持占位符原始样式，最终报告中显示为 <code class="bg-gray-100 px-1 rounded">&#123;&#123;字段名&#125;&#125;</code>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-3">
+          <button onclick="closePreviewDialog()" class="px-6 py-2 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 rounded-lg font-medium transition-colors">
+            返回修改
+          </button>
+          <button onclick="ignorePreviewAndGenerate()" class="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition-colors">
+            忽略问题，直接生成
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const container = document.createElement('div');
+  container.innerHTML = dialogHtml;
+  document.body.appendChild(container);
+
+  (window as unknown as Record<string, unknown>).closePreviewDialog = function(event?: MouseEvent) {
+    if (event && (event.target as HTMLElement).closest('#preview-dialog .bg-white')) return;
+    const dialog = document.getElementById('preview-dialog');
+    if (dialog) dialog.parentElement?.remove();
+  };
+
+  (window as unknown as Record<string, unknown>).ignorePreviewAndGenerate = async function() {
+    const dialog = document.getElementById('preview-dialog');
+    if (dialog) dialog.parentElement?.remove();
+    await doGenerate();
+  };
 }
 
 // 显示结果对话框
@@ -553,6 +716,9 @@ function render(): void {
           `}
         </div>
 
+        <!-- 版本更新提示 -->
+        <div id="update-notice"></div>
+
         <!-- 文件上传区 -->
         <div class="grid md:grid-cols-2 gap-6 mb-8">
           <!-- Excel 上传 -->
@@ -775,6 +941,7 @@ function render(): void {
               </span>
             </span>
           </p>
+          <p class="text-xs mt-2">估价报告生成器 v${APP_VERSION}</p>
         </div>
       </main>
     </div>
@@ -789,5 +956,6 @@ export function initApp(): void {
   (window as unknown as Record<string, unknown>).downloadSampleTemplate = downloadSampleTemplate;
   (window as unknown as Record<string, unknown>).toggleInstructions = toggleInstructions;
 
+  checkForUpdates();
   render();
 }

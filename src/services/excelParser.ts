@@ -20,6 +20,14 @@ export interface ExtractedData {
   [key: string]: string;
 }
 
+/** 字段在 Excel 中的位置信息 */
+export interface FieldPosition {
+  fieldName: string;
+  row: number;
+  hasValue: boolean;
+  value: string;
+}
+
 /** 纯二维数组：data[row][col]，data[0][0] = 表格标记正下方第一个单元格 */
 export interface TableData {
   tableName: string;
@@ -29,13 +37,14 @@ export interface TableData {
 export interface ExtractionResult {
   fields: ExtractedData;
   tables: TableData[];
+  fieldPositions: FieldPosition[];
   debug?: string;
 }
 
 // ---- 正则 ----
 
 const RE_TABLE_MARKER = /^\{\{table:(.+?)\}\}$/;
-const RE_ANY_MARKER   = /^\{\{.+?\}\}$/;
+const RE_ANY_MARKER   = /^\{\{(.+?)\}\}$/;
 
 // ---- 辅助 ----
 
@@ -235,6 +244,7 @@ function readRangeToArray(sheet: XLSX.WorkSheet, range: TableRange): string[][] 
 export function extractAllFromExcel(fileBuffer: ArrayBuffer): ExtractionResult {
   const workbook = XLSX.read(fileBuffer, { type: 'array' });
   const fields: ExtractedData = {};
+  const fieldPositions: FieldPosition[] = [];
   const tables: TableData[] = [];
   const debugLines: string[] = [];
 
@@ -303,10 +313,11 @@ export function extractAllFromExcel(fileBuffer: ArrayBuffer): ExtractionResult {
       const fieldName = m[1];
       const value = readCell(sheet, r, 2) || '';
       fields[fieldName] = value;
+      fieldPositions.push({ fieldName, row: r, hasValue: !isBlank(readCell(sheet, r, 2)), value });
     }
   }
 
-  const result: ExtractionResult = { fields, tables };
+  const result: ExtractionResult = { fields, tables, fieldPositions };
   if (debugLines.length > 0) {
     result.debug = debugLines.join('\n');
   }

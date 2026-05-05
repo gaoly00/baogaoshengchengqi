@@ -454,13 +454,40 @@ export function createSampleTemplate(placeholders: string[]): Document {
 }
 
 /**
- * 下载 docx 文件
+ * 下载 docx 文件（直接下载到默认目录）
  */
 export function downloadDocx(buffer: ArrayBuffer, filename: string): void {
   const blob = new Blob([buffer], {
     type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
   });
   downloadBlob(blob, filename);
+}
+
+/**
+ * "另存为" — 弹出系统保存对话框让用户选择路径
+ * 返回保存后的文件名，如果用户取消则返回 null
+ */
+export async function saveAsDocx(buffer: ArrayBuffer, suggestedName: string): Promise<string | null> {
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  });
+
+  try {
+    const handle = await (window as any).showSaveFilePicker({
+      suggestedName,
+      types: [{
+        description: 'Word 文档',
+        accept: { 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'] }
+      }]
+    });
+    const writable = await handle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    return handle.name;
+  } catch (err: any) {
+    if (err.name === 'AbortError') return null; // 用户取消
+    throw err;
+  }
 }
 
 /**
