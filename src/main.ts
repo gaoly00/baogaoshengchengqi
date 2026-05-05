@@ -924,6 +924,12 @@ function render(): void {
         </div>
 
         <div class="mt-12 text-center text-sm text-gray-400">
+          <p class="text-xs mb-2">
+            <svg class="w-3.5 h-3.5 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m0 0v2m0-2h2m-2 0H10m9.364-6.364a9 9 0 11-12.728 0 9 9 0 0112.728 0zM12 8v4"></path>
+            </svg>
+            数据处理完全在本地完成，不会上传到任何服务器
+          </p>
           <p class="text-xs">
             出现报错，截图发给
             <span class="relative inline-block group cursor-pointer text-blue-500 hover:text-blue-600 font-medium underline decoration-dotted underline-offset-2 select-none">
