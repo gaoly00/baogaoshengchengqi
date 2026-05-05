@@ -35,7 +35,7 @@ const VERSION_URL = "https://gist.githubusercontent.com/gaoly00/79066c73f63d9c94
 // 版本检测函数
 async function checkForUpdates(): Promise<void> {
   try {
-    const response = await fetch(VERSION_URL);
+    const response = await fetch(VERSION_URL + "?t=" + Date.now());
     const data = await response.json();
     const latestVersion = data.version;
     const updateUrl = data.url;
